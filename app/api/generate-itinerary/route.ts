@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { Trip } from '@/lib/types/itinerary';
+import { Trip, DayItinerary } from '@/lib/types/itinerary';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -85,6 +85,12 @@ Return a JSON object with this structure:
 
     const result = JSON.parse(content);
 
+    // Add unique IDs to each day since OpenAI doesn't generate them
+    const daysWithIds = result.days.map((day: DayItinerary, index: number) => ({
+      ...day,
+      id: `day-${Date.now()}-${index}`,
+    }));
+
     // Create the full trip object
     const trip: Trip = {
       id: `trip-${Date.now()}`,
@@ -92,7 +98,7 @@ Return a JSON object with this structure:
       startDate,
       endDate,
       destination,
-      days: result.days,
+      days: daysWithIds,
       bucket: [],
     };
 

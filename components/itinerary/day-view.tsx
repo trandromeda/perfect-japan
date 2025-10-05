@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import {
     DndContext,
     closestCenter,
@@ -42,11 +43,18 @@ export function DayView({
     onMoveToBacklog,
     onAddActivity,
 }: DayViewProps) {
+
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
+    );
+
+    // Memoize the items array to prevent unnecessary re-renders
+    const sortableItems = useMemo(() =>
+        day.activities.map((activity) => activity.id),
+        [day.activities]
     );
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -90,12 +98,13 @@ export function DayView({
             </CardHeader>
             <CardContent>
                 <DndContext
+                    key={day.id}
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                 >
                     <SortableContext
-                        items={day.activities.map((a) => a.id)}
+                        items={sortableItems}
                         strategy={verticalListSortingStrategy}
                     >
                         <div className="space-y-3">
