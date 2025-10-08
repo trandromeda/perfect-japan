@@ -1,22 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { Trip, DayItinerary } from '@/lib/types/itinerary';
+import { Trip } from '@/lib/types/itinerary';
+import {
+  GenerateItineraryRequestSchema,
+  OpenAIResponseSchema,
+  TripSchema,
+  validateWithLogging
+} from '@/lib/validation/schemas';
+import { z } from 'zod';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-interface GenerateItineraryRequest {
-  destination: string;
-  startDate: string;
-  endDate: string;
-  interests?: string[];
-  travelStyle?: 'relaxed' | 'moderate' | 'packed';
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const body: GenerateItineraryRequest = await request.json();
+    const rawBody = await request.json();
+
+    // Validate request body
+    const validationResult = GenerateItineraryRequestSchema.safeParse(rawBody);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        {
+          error: 'Invalid request data',
+          details: validationResult.error.format()
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = validationResult.data;
     const { destination, startDate, endDate, interests = [], travelStyle = 'moderate' } = body;
 
     const prompt = `You are an expert Japan travel planner. Create a detailed itinerary for a trip to ${destination}, Japan.
@@ -83,17 +96,25 @@ Return a JSON object with this structure:
       throw new Error('No content received from OpenAI');
     }
 
-    const result = JSON.parse(content);
+    const rawResult = JSON.parse(content);
+
+    // Validate OpenAI response
+    const validatedResponse = validateWithLogging(
+      OpenAIResponseSchema,
+      rawResult,
+      'OpenAI Response'
+    );
 
     // Add unique IDs to each day since OpenAI doesn't generate them
-    const daysWithIds = result.days.map((day: DayItinerary, index: number) => ({
+    const timestamp = Date.now();
+    const daysWithIds = validatedResponse.days.map((day, index) => ({
       ...day,
-      id: `day-${Date.now()}-${index}`,
+      id: `day-${timestamp}-${index}`,
     }));
 
     // Create the full trip object
     const trip: Trip = {
-      id: `trip-${Date.now()}`,
+      id: `trip-${timestamp}`,
       title: `Trip to ${destination}`,
       startDate,
       endDate,
@@ -101,6 +122,13 @@ Return a JSON object with this structure:
       days: daysWithIds,
       bucket: [],
     };
+
+    // Final validation of the complete trip object
+    validateWithLogging(
+      z.lazy(() => TripSchema),
+      trip,
+      'Final Trip Object'
+    );
 
     return NextResponse.json(trip);
   } catch (error) {
