@@ -6,9 +6,19 @@ import { CreateTripForm } from '@/components/itinerary/create-trip-form';
 import { DayView } from '@/components/itinerary/day-view';
 import { Bucket } from '@/components/itinerary/bucket';
 import { DayReview } from '@/components/itinerary/day-review';
+import { CloudSync } from '@/components/cloud-sync';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Cloud, Loader2 } from 'lucide-react';
+import { useCloudSync } from '@/lib/hooks/use-cloud-sync';
+import type { Trip } from '@/lib/types/itinerary';
 
 export default function Home() {
   const {
@@ -22,8 +32,23 @@ export default function Home() {
     updateActivity,
   } = useItineraryStore();
 
+  const { loadFromCloud, getAllTrips, isLoading } = useCloudSync();
+
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const [showReview, setShowReview] = useState(false);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
+
+  const handleShowLoadDialog = async () => {
+    const trips = await getAllTrips();
+    setAvailableTrips(trips);
+    setShowLoadDialog(true);
+  };
+
+  const handleLoadTrip = async (tripId: string) => {
+    await loadFromCloud(tripId);
+    setShowLoadDialog(false);
+  };
 
   if (!currentTrip) {
     return (
@@ -33,7 +58,55 @@ export default function Home() {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Perfect Japan</h1>
             <p className="text-lg text-gray-600">Plan your perfect trip to Japan</p>
           </div>
+          <div className="flex justify-center mb-4">
+            <Button
+              onClick={handleShowLoadDialog}
+              variant="outline"
+              disabled={isLoading}
+            >
+              <Cloud className="h-4 w-4 mr-2" />
+              Load Saved Trip
+            </Button>
+          </div>
           <CreateTripForm onTripCreated={setCurrentTrip} />
+
+          <Dialog open={showLoadDialog} onOpenChange={setShowLoadDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Load a Saved Trip</DialogTitle>
+                <DialogDescription>
+                  Select a trip from your saved trips to continue planning
+                </DialogDescription>
+              </DialogHeader>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                </div>
+              ) : availableTrips.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No saved trips found
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {availableTrips.map((trip) => (
+                    <div
+                      key={trip.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => handleLoadTrip(trip.id)}
+                    >
+                      <div>
+                        <div className="font-medium">{trip.title}</div>
+                        <div className="text-sm text-gray-500">
+                          {trip.destination} • {new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <Cloud className="h-5 w-5 text-blue-500" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     );
@@ -71,11 +144,16 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">{currentTrip.title}</h1>
-          <p className="text-gray-600">
-            {format(new Date(currentTrip.startDate), 'MMM d')} - {format(new Date(currentTrip.endDate), 'MMM d, yyyy')}
-          </p>
+        <div className="mb-8">
+          <div className="text-center mb-4">
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">{currentTrip.title}</h1>
+            <p className="text-gray-600">
+              {format(new Date(currentTrip.startDate), 'MMM d')} - {format(new Date(currentTrip.endDate), 'MMM d, yyyy')}
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <CloudSync />
+          </div>
         </div>
 
         {/* Navigation */}
